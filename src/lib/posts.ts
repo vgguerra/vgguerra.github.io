@@ -2,52 +2,65 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 
+export type Locale = "pt" | "en";
+
 export type PostFrontmatter = {
   title: string;
   description: string;
   date: string;
   tags?: string[];
   draft?: boolean;
+  translation_slug?: string;
 };
 
 export type Post = PostFrontmatter & {
   slug: string;
+  locale: Locale;
   content: string;
 };
 
-const POSTS_DIR = path.join(process.cwd(), "content", "posts");
+function postsDir(locale: Locale): string {
+  return locale === "pt"
+    ? path.join(process.cwd(), "content", "posts")
+    : path.join(process.cwd(), "content", "posts", locale);
+}
 
-function readPostFile(filename: string): Post {
+function readPostFile(locale: Locale, filename: string): Post {
   const slug = filename.replace(/\.mdx?$/, "");
-  const fullPath = path.join(POSTS_DIR, filename);
+  const fullPath = path.join(postsDir(locale), filename);
   const raw = fs.readFileSync(fullPath, "utf8");
   const { data, content } = matter(raw);
   return {
     slug,
+    locale,
     title: String(data.title ?? slug),
     description: String(data.description ?? ""),
     date: String(data.date ?? ""),
     tags: Array.isArray(data.tags) ? data.tags.map(String) : undefined,
     draft: Boolean(data.draft ?? false),
+    translation_slug: data.translation_slug
+      ? String(data.translation_slug)
+      : undefined,
     content,
   };
 }
 
-export function getAllPosts(): Post[] {
-  if (!fs.existsSync(POSTS_DIR)) return [];
+export function getAllPosts(locale: Locale = "pt"): Post[] {
+  const dir = postsDir(locale);
+  if (!fs.existsSync(dir)) return [];
   return fs
-    .readdirSync(POSTS_DIR)
-    .filter((f) => /\.mdx?$/.test(f))
-    .map(readPostFile)
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.mdx?$/.test(entry.name))
+    .map((entry) => readPostFile(locale, entry.name))
     .filter((post) => !post.draft)
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
-export function getPostBySlug(slug: string): Post | null {
+export function getPostBySlug(locale: Locale, slug: string): Post | null {
   const candidates = [`${slug}.mdx`, `${slug}.md`];
   for (const filename of candidates) {
-    const fullPath = path.join(POSTS_DIR, filename);
-    if (fs.existsSync(fullPath)) return readPostFile(filename);
+    const fullPath = path.join(postsDir(locale), filename);
+    if (fs.existsSync(fullPath)) return readPostFile(locale, filename);
   }
   return null;
 }

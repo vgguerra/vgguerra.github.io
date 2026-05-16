@@ -2,11 +2,11 @@
 @plugin "@tailwindcss/typography";
 
 :root {
-  --background: #fafaf9;
-  --foreground: #1c1917;
-  --muted: #78716c;
-  --accent: #0a0a0a;
-  --border: #e7e5e4;
+  --background: #ffffff;
+  --foreground: #000000;
+  --muted: #525252;
+  --accent: #000000;
+  --border: #e5e5e5;
 }
 
 @theme inline {
@@ -19,14 +19,24 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* OS preference applies only if the user has not opted into a theme. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0c0a09;
-    --foreground: #e7e5e4;
+    --foreground: #f5f5f4;
     --muted: #a8a29e;
     --accent: #fafaf9;
     --border: #292524;
   }
+}
+
+/* Explicit override via toggle. */
+:root[data-theme="dark"] {
+  --background: #0c0a09;
+  --foreground: #f5f5f4;
+  --muted: #a8a29e;
+  --accent: #fafaf9;
+  --border: #292524;
 }
 
 html {
@@ -39,14 +49,57 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Tie prose colors to the theme variables so light/dark switch consistently. */
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted);
+  --tw-prose-links: var(--foreground);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted);
+  --tw-prose-bullets: var(--muted);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: transparent;
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
 [data-rehype-pretty-code-figure] pre {
   border-radius: 0.5rem;
   padding: 1rem;
   overflow-x: auto;
   font-size: 0.875rem;
-  background: #0c0a09;
 }
 
 [data-rehype-pretty-code-figure] code {
   font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* Dual-theme code blocks via rehype-pretty-code:
+   light theme is applied via inline style; dark theme via custom properties. */
+:root[data-theme="dark"] [data-rehype-pretty-code-figure] pre,
+:root[data-theme="dark"] [data-rehype-pretty-code-figure] code,
+:root[data-theme="dark"] [data-rehype-pretty-code-figure] code span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-rehype-pretty-code-figure] pre,
+  :root:not([data-theme="light"]) [data-rehype-pretty-code-figure] code,
+  :root:not([data-theme="light"]) [data-rehype-pretty-code-figure] code span {
+    color: var(--shiki-dark) !important;
+    background-color: var(--shiki-dark-bg) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+    text-decoration: var(--shiki-dark-text-decoration) !important;
+  }
 }

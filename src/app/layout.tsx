@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,6 +15,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const themeBootstrap = `
+try {
+  var stored = localStorage.getItem('theme');
+  if (stored === 'light' || stored === 'dark') {
+    document.documentElement.setAttribute('data-theme', stored);
+  }
+} catch (e) {}
+`;
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://vgguerra.github.io"),
   title: {
@@ -21,6 +32,12 @@ export const metadata: Metadata = {
   },
   description:
     "Notas técnicas sobre engenharia de software com IA: RAG, sistemas multi-agente, avaliação de agentes e prática diária com LLMs.",
+  alternates: {
+    languages: {
+      "pt-BR": "/",
+      en: "/en/",
+    },
+  },
   openGraph: {
     type: "website",
     locale: "pt_BR",
@@ -35,14 +52,18 @@ export default function RootLayout({
     <html
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <header className="border-b border-border">
           <div className="mx-auto max-w-2xl flex items-center justify-between px-6 py-6">
             <Link href="/" className="font-semibold tracking-tight">
               vgguerra
             </Link>
-            <nav className="text-sm text-muted flex gap-6">
+            <nav className="text-sm text-muted flex items-center gap-6">
               <Link href="/" className="hover:text-foreground transition">
                 blog
               </Link>
@@ -62,6 +83,8 @@ export default function RootLayout({
               >
                 linkedin
               </Link>
+              <LanguageSwitcher />
+              <ThemeToggle />
             </nav>
           </div>
         </header>
