@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# vgguerra.github.io
 
-## Getting Started
+Blog técnico de Victor Guerra. Notas práticas sobre AI Software Engineering: RAG, sistemas multi-agente, avaliação de LLMs.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router · Static Export)
+- TypeScript
+- Tailwind CSS 4 + `@tailwindcss/typography`
+- MDX via `next-mdx-remote`
+- `rehype-pretty-code` + Shiki para syntax highlight
+- Deploy: GitHub Pages via GitHub Actions
+
+## Desenvolvimento
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Adicionar um post
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Criar arquivo em `content/posts/AAAA-MM-titulo.mdx`
+2. Frontmatter mínimo:
+   ```yaml
+   ---
+   title: "Título do post"
+   description: "Resumo de uma linha que aparece na home."
+   date: "2026-05-16"
+   tags: ["tag-1", "tag-2"]
+   draft: false
+   ---
+   ```
+3. Escrever em MDX (Markdown com componentes React).
+4. `npm run build` para gerar `out/`.
 
-## Learn More
+Posts com `draft: true` ficam fora da listagem e do build.
 
-To learn more about Next.js, take a look at the following resources:
+## Build estático
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Saída em `out/`. Pode ser servido por qualquer host estático.
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Push na `main` dispara o workflow [.github/workflows/deploy.yml](.github/workflows/deploy.yml) que publica no GitHub Pages.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Pré-requisito no repo: **Settings → Pages → Source = GitHub Actions**.
