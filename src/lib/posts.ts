@@ -64,3 +64,26 @@ export function getPostBySlug(locale: Locale, slug: string): Post | null {
   }
   return null;
 }
+
+export const POSTS_PER_PAGE = 10;
+
+export type PostsPage = {
+  posts: Post[];
+  page: number;
+  totalPages: number;
+};
+
+export function paginatePosts(posts: Post[], page: number): PostsPage {
+  const totalPages = Math.max(1, Math.ceil(posts.length / POSTS_PER_PAGE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * POSTS_PER_PAGE;
+  return {
+    posts: posts.slice(start, start + POSTS_PER_PAGE),
+    page: safePage,
+    totalPages,
+  };
+}
+
+export function totalPages(locale: Locale): number {
+  return Math.max(1, Math.ceil(getAllPosts(locale).length / POSTS_PER_PAGE));
+}

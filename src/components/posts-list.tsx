@@ -1,19 +1,30 @@
 import Link from "next/link";
-import { getAllPosts, type Locale } from "@/lib/posts";
+import { getAllPosts, paginatePosts, type Locale } from "@/lib/posts";
 import { formatDate, pathFor, t } from "@/lib/i18n";
+import { Pagination } from "@/components/pagination";
 
-export function PostsList({ locale }: { locale: Locale }) {
-  const posts = getAllPosts(locale);
+export function PostsList({
+  locale,
+  page = 1,
+}: {
+  locale: Locale;
+  page?: number;
+}) {
+  const all = getAllPosts(locale);
+  const { posts, page: current, totalPages } = paginatePosts(all, page);
   const strings = t[locale];
+  const showIntro = current === 1;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-16">
-      <section className="mb-16">
-        <h1 className="text-3xl font-semibold tracking-tight mb-3">
-          Victor Guerra
-        </h1>
-        <p className="text-muted leading-relaxed">{strings.intro}</p>
-      </section>
+      {showIntro && (
+        <section className="mb-16">
+          <h1 className="text-3xl font-semibold tracking-tight mb-3">
+            Victor Guerra
+          </h1>
+          <p className="text-muted leading-relaxed">{strings.intro}</p>
+        </section>
+      )}
 
       <section>
         <h2 className="text-sm uppercase tracking-wider text-muted mb-6">
@@ -43,6 +54,8 @@ export function PostsList({ locale }: { locale: Locale }) {
             ))}
           </ul>
         )}
+
+        <Pagination locale={locale} page={current} totalPages={totalPages} />
       </section>
     </div>
   );

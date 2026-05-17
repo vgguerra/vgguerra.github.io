@@ -38,6 +38,22 @@ Acesse `http://localhost:3000`.
 
 Posts com `draft: true` ficam fora da listagem e do build.
 
+## Analytics (opcional)
+
+Pageviews via [GoatCounter](https://www.goatcounter.com) (free, sem cookies). Para ativar:
+
+1. Criar conta em [goatcounter.com](https://www.goatcounter.com) e escolher um subdomínio (ex.: `vgguerra.goatcounter.com`).
+2. Adicionar uma **GitHub repository variable** chamada `GOATCOUNTER_ENDPOINT` com valor `https://vgguerra.goatcounter.com/count` em **Settings → Secrets and variables → Actions → Variables**.
+3. Próximo push pra `main` injeta o script automaticamente.
+
+Pra dev local: `cp .env.local.example .env.local` e preencher `NEXT_PUBLIC_GOATCOUNTER_ENDPOINT`.
+
+Quando a variável está vazia, o script de tracking não é renderizado.
+
+## Paginação
+
+Configurada em [src/lib/posts.ts](src/lib/posts.ts) via constante `POSTS_PER_PAGE = 10`. Página 1 é sempre a raiz (`/` ou `/en/`); páginas 2+ ficam em `/page/N/` e `/en/page/N/`. O componente de paginação desaparece sozinho quando só há uma página.
+
 ## Build estático
 
 ```bash
