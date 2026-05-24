@@ -1,0 +1,169 @@
+---
+title: "Por que BM25 ainda importa em 2026"
+description: "Embeddings densos não substituíram busca lexical. Acabei de subir um eval próprio em domínio brasileiro e o número é incômodo."
+date: "2026-05-24"
+tags: ["rag", "retrieval", "bm25", "qdrant"]
+draft: false
+translation_slug: "2026-05-why-bm25-still-matters"
+---
+
+A cada três meses sai um post novo afirmando que vector search resolveu busca pra sempre e que BM25 é coisa de 2005. É um ótimo título de Medium, mas não bate com o que acontece quando você roda um eval honesto.
+
+Eu acabei de subir o [Open Energy RAG](https://github.com/vgguerra/OpenEnergyRag), um assistente de citação sobre regulação do setor elétrico brasileiro (PRODIST/ANEEL, ONS). Tem 1065 chunks no Qdrant, 25 perguntas curadas à mão como eval set, e um resultado incômodo pra quem torce contra BM25.
+
+| Métrica | Dense puro (e5-large) | Hybrid (dense + BM25, RRF) |
+|---|---|---|
+| recall@1 | 0.720 | **0.760** |
+| recall@5 | 0.840 | **0.880** |
+| recall@10 | 0.920 | **1.000** |
+| MRR | 0.782 | **0.819** |
+
+Em todas as 5 métricas, adicionar BM25 ao lado do embedding denso melhora o retrieval. Em `recall@10` o ganho é de 8 pontos percentuais inteiros, e o chunk certo passa a aparecer no top-10 em **toda** pergunta do eval set.
+
+Esse post é a explicação de por que isso acontece e como fazer.
+
+## BM25 em um parágrafo
+
+BM25 é um algoritmo de busca lexical baseado em TF-IDF, publicado em 1994 e ainda padrão em Elasticsearch, Lucene, OpenSearch e quase todo motor de busca textual. A intuição é simples. Documentos que contêm os termos da query, especialmente termos raros que aparecem pouco no corpus geral, recebem score alto. Não tem rede neural, não tem treino, não tem GPU. É contagem de palavras com matemática boa.
+
+Embeddings densos, tipo o e5 ou o BGE, fazem outra coisa. Mapeiam o texto inteiro pra um vetor de alta dimensão, e a similaridade é dada pela distância cosseno entre vetores. Em vez de bater token, eles batem *significado*.
+
+Os dois modos têm trade-offs opostos. Onde um falha, o outro acerta.
+
+## Onde dense puro tropeça
+
+Quando rodei o eval inicial com retrieval só denso, percebi um padrão claro de falhas. Três casos típicos.
+
+### Siglas e acrônimos
+
+Uma das perguntas do eval era *"Requisitos do sistema de medição SED no SDAT"*. SED é Subestação de Distribuição, SDAT é Sistema de Distribuição de Alta Tensão. Termos específicos do PRODIST. No corpus de treino do e5 (o acervo de bilhões de páginas do Common Crawl multilíngue que o modelo viu durante o pré-treinamento), essas siglas aparecem pouquíssimas vezes, então o modelo aprendeu pouco sobre elas. O vetor que ele gera pra "SED no SDAT" não fica muito diferente do vetor pra "instalação de distribuição em alta tensão" qualquer.
+
+BM25 não tem esse problema. Vê "SED" e "SDAT" como tokens raros (IDF alto) e prioriza qualquer chunk que os contenha literalmente.
+
+### Termos quase iguais
+
+A pergunta *"Definição de tensão precária"* tinha como gold o item 140 do glossário do PRODIST. Mas o glossário tem também "tensão crítica" (item 370), "tensão adequada" (item 368), e mais uns dez termos que começam com "tensão". Pro modelo denso, todos esses chunks têm vetores muito próximos. A diferença entre eles é uma única palavra, "precária", "crítica", "adequada", que o embedding agrega numa dimensão sutil.
+
+BM25 trata cada termo como um peso explícito. Se a busca tem "precária", o chunk com "precária" sobe acima do com "crítica", garantido.
+
+### Numeração e estrutura
+
+PRODIST é normativo. Tem coisas como "item 50.3.1", "Seção 2.1", "Anexo 3.D". Densos não dão importância pra números soltos. BM25 dá. Busca por "item 50.3 do Módulo 5" e ele te leva pra lá em segundos.
+
+## Onde dense ganha
+
+Pra ser justo, o lado denso ganha onde lexical perde.
+
+Paráfrase. A pergunta "como classificar a tensão de atendimento" não tem nenhum termo do glossário, mas o e5 entende que está perguntando sobre as três categorias (adequada, precária, crítica) e traz os chunks certos.
+
+Sinônimos. "Consumidor" e "usuário" são parecidos pro modelo denso, mas distantes pro BM25.
+
+Conceito abstrato. "Quando a distribuidora pode desconectar uma unidade" puxa chunks sobre suspensão, corte, interrupção, sem que nenhuma dessas palavras esteja na pergunta.
+
+A questão não é "dense vs BM25". É como ter os dois ao mesmo tempo, sem código de fusão na mão.
+
+## Hybrid + RRF, a forma elegante
+
+A melhor opção (na minha opinião) é:
+
+1. Indexar cada chunk **duas vezes**, uma com vetor denso, outra com vetor esparso (BM25).
+2. Na query, embedar a pergunta nas duas representações.
+3. Buscar top-N em cada modalidade separadamente.
+4. Fundir as duas listas em uma só usando **Reciprocal Rank Fusion (RRF)**.
+
+RRF é o algoritmo mais brutalmente simples de fusão que existe. Pra cada documento que aparece em alguma das listas:
+
+```
+score_rrf(d) = Σ 1 / (k + rank(d, lista_i))
+```
+
+Com `k = 60` por convenção. Documentos que aparecem alto em **ambas** as listas chegam ao top combinado. Quem aparece alto em uma só já fica menos forte. Quem não aparece em nenhuma, fica de fora.
+
+Não tem peso, não tem hiperparâmetro fino, não tem normalização de score por modalidade (que é um pesadelo). Funciona porque ranking é mais estável que score bruto.
+
+## Implementação no Qdrant
+
+O Qdrant suporta RRF server-side desde a versão 1.10. Você define a coleção com **named vectors**, um pra dense e outro pra sparse:
+
+```python
+from qdrant_client.models import VectorParams, SparseVectorParams, Distance
+
+client.create_collection(
+    collection_name="open-energy",
+    vectors_config={
+        "dense": VectorParams(size=1024, distance=Distance.COSINE),
+    },
+    sparse_vectors_config={
+        "sparse": SparseVectorParams(),
+    },
+)
+```
+
+Cada ponto carrega os dois vetores no payload:
+
+```python
+from qdrant_client.models import PointStruct, SparseVector
+
+PointStruct(
+    id=str(uuid.uuid4()),
+    vector={
+        "dense": dense_vector,
+        "sparse": SparseVector(indices=..., values=...),
+    },
+    payload={"text": chunk_text, "metadata": chunk_metadata},
+)
+```
+
+E na query, você manda os dois lados e deixa o Qdrant fundir:
+
+```python
+from qdrant_client.models import Prefetch, FusionQuery, Fusion
+
+hits = client.query_points(
+    collection_name="open-energy",
+    prefetch=[
+        Prefetch(query=dense_query, using="dense", limit=20),
+        Prefetch(query=sparse_query, using="sparse", limit=20),
+    ],
+    query=FusionQuery(fusion=Fusion.RRF),
+    limit=5,
+).points
+```
+
+`prefetch` faz 20 candidatos de cada lado, `FusionQuery(Fusion.RRF)` combina, `limit=5` corta no top-5 final. Zero código de fusão na sua aplicação.
+
+Pro lado dense usei `intfloat/multilingual-e5-large` via fastembed. Pro lado sparse, `Qdrant/bm25` (também via fastembed, que produz BM25 já com IDF aplicado por documento). [Código completo no repo.](https://github.com/vgguerra/OpenEnergyRag/blob/main/backend/src/retrieval/qdrant.py)
+
+## Quando não vale a pena
+
+Honestidade. Hybrid não é grátis.
+
+Custos:
+
+- Mais memória no Qdrant, cada ponto carrega dois vetores em vez de um.
+- Mais latência por query, você faz duas buscas em vez de uma (embora em paralelo, então o pior caso é o lado mais lento).
+- Mais código pra manter, especialmente se sua stack não tem RRF server-side e você precisa implementar a fusão.
+
+Casos em que dense puro provavelmente basta:
+
+- Base de documentos em inglês de domínio comum (artigos de blog, FAQs de produto). Modelos densos foram treinados aí, conhecem bem o vocabulário.
+- Queries sempre conversacionais, parafraseadas, sem siglas nem termos exatos.
+- Latência muito sensível (`<50ms` p99) e você não pode pagar a busca dupla.
+
+Casos em que hybrid praticamente sempre ganha:
+
+- Base de documentos de domínio técnico (regulação, médico, jurídico, finanças). Cheio de siglas e termos exatos.
+- Base de documentos multilíngue ou em idiomas com menos treino do modelo denso (PT-BR está nessa lista).
+- Eval set com perguntas que pedem termos literais ("o que é X", "definição de Y").
+
+O Open Energy RAG é o cenário em que hybrid brilha. Setor elétrico brasileiro, com PRODIST cheio de SED, SDAT, DEC, FEC, DRP, DRC. Por isso o ganho de 8pp em recall@10 não foi surpresa.
+
+## A questão de fundo
+
+A indústria gosta de narrativas binárias. "X morreu, Y é o futuro." É vendável, mas raramente é verdade.
+
+BM25 não vai substituir vector search. Vector search não vai substituir BM25. O que vai te dar o melhor recall em produção é ter os dois rodando em paralelo, deixando cada um cobrir o ponto cego do outro. Não tem nada glamouroso nisso. É um algoritmo de 1994 reaparecendo junto com a tecnologia de 2026 e melhorando o número.
+
+Se você está montando um RAG sério, separa duas horas no fim de semana, lê a doc do Qdrant sobre named vectors e RRF, e adiciona o lado sparse. Em quase todo cenário não-trivial você vai sair com recall mais alto, sem ter que mexer no modelo denso.
+
+Os números do meu eval estão [no repo](https://github.com/vgguerra/OpenEnergyRag/blob/main/evals/results/latest.md) pra qualquer um reproduzir.
